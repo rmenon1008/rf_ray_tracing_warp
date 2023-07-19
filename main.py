@@ -5,6 +5,7 @@ import warp as wp
 import numpy as np
 import trimesh as tm
 import matplotlib.pyplot as plt
+from trimesh import viewer
 
 from tracer import Tracer
 from viz.visualization import visualize
