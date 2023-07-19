@@ -6,6 +6,7 @@ import trimesh as tm
 import json
 import http.server
 import matplotlib.pyplot as plt
+from trimesh import viewer
 
 print("Done!", end="\n\n")
 
