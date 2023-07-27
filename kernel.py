@@ -1,54 +1,49 @@
 import warp as wp
 
-LIGHT_SPEED_MPS = 2.998e8   # 299,800,000 m/s
-SAMPLE_RATE_HZ = 50.0e9    # 50 GHz
-
-# @wp.func
-# def sample_close_to_target(target: wp.vec3, phi: wp.float64, state: wp.state) -> wp.vec3:
-#     while True:
-#         sample = wp.sample_unit_sphere_surface(state)
-#         angle_between = wp.acos(wp.dot(target, sample))
-#         if angle_between < phi:
-#             return sample
+# LIGHT_SPEED_MPS = 2.998e8   # 299,800,000 m/s
+# SAMPLE_RATE_HZ = 50.0e9    # 50 GHz
 
 @wp.func
 def reflect(v: wp.vec3, n: wp.vec3) -> wp.vec3:
     return v - 2.0 * wp.dot(v, n) * n
 
-@wp.func
-def amp_bounce_loss(angle_between: wp.float32) -> wp.float32:
-    return wp.abs((wp.sin(angle_between + 1.57) + 1.0) / 2.0)
+# @wp.func
+# def amp_bounce_loss(angle_between: wp.float32) -> wp.float32:
+#     # return wp.abs((wp.sin(angle_between + 1.57) + 1.0) / 2.0)
+#     return 0.9
 
-@wp.func
-def delay(distance: wp.float32) -> wp.float32:
-    return (distance / LIGHT_SPEED_MPS) * SAMPLE_RATE_HZ
+# @wp.func
+# def delay(distance: wp.float32, light_speed_mps) -> wp.float32:
+#     return (distance / LIGHT_SPEED_MPS) * SAMPLE_RATE_HZ
 
-@wp.func
-def set_impulse_response(path: wp.array(dtype=wp.vec3), impulse_response: wp.array(dtype=wp.float32), ray_power: wp.float32):
-    amplitude = ray_power
-    delay = wp.float32(0.0)
+# @wp.func
+# def set_impulse_response(path: wp.array(dtype=wp.vec3), impulse_response: wp.array(dtype=wp.float32), ray_power: wp.float32):
+#     amplitude = ray_power
+#     delay = wp.float32(0.0)
 
-    for i in range(2, path.shape[0]):
-        seg1 = path[i - 1] - path[i - 2]
-        seg2 = path[i] - path[i - 1]
-        seg1_len = wp.length(seg1)
-        angle_between = wp.acos(wp.dot(seg1, seg2) / (seg1_len * wp.length(seg2)))
-        amplitude *= amp_bounce_loss(angle_between)
-        delay += delay(seg1_len)
-    delay_samples = wp.int32(delay)
-    if delay_samples < impulse_response.shape[0]:
-        impulse_response[delay_samples] = impulse_response[delay_samples] + amplitude
+#     for i in range(2, path.shape[0]):
+#         seg1 = path[i - 1] - path[i - 2]
+#         seg2 = path[i] - path[i - 1]
+#         seg1_len = wp.length(seg1)
+#         angle_between = wp.acos(wp.dot(seg1, seg2) / (seg1_len * wp.length(seg2)))
+#         amplitude *= amp_bounce_loss(angle_between)
+#         delay += delay(seg1_len)
+#         print(seg1_len)
+#     print(delay)
+#     print("")
+#     delay_samples = wp.int32(delay)
+#     if delay_samples < impulse_response.shape[0]:
+#         impulse_response[delay_samples] = impulse_response[delay_samples] + amplitude
 
 @wp.kernel
-def trace_cir_kernel(
+def trace_paths_kernel(
     env_mesh: wp.uint64,
     tx_pos: wp.vec3,
-    tx_power: wp.float32,
     rx_mesh: wp.uint64,
     max_bounces: wp.int32,
     traced_paths: wp.array2d(dtype=wp.vec3),
     received_paths: wp.array2d(dtype=wp.vec3),
-    impulse_response: wp.array(dtype=wp.float32)
+    row_mask: wp.array(dtype=wp.uint32),
 ):
     tid = wp.tid()
 
@@ -91,9 +86,9 @@ def trace_cir_kernel(
             if hit_recv:
                 pos = pos + dir * t_rx
                 traced_paths[tid, bounce + 1] = pos
-                for i in range(wp.int32(max_bounces) + 1):
+                for i in range(wp.int32(bounce) + 2):
                     received_paths[tid, i] = traced_paths[tid, i]
-                set_impulse_response(received_paths[tid], impulse_response, tx_power / wp.float32(received_paths.shape[0]))
+                row_mask[tid] = wp.uint32(1)
                 ray_finished = True
             elif maybe_hit_env:
                 pos = pos + dir * t_env
