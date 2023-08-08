@@ -1,5 +1,6 @@
 # Custom
-viz/scene.html
+**/scene.html
+/tmp
 
 # VS Code
 .vscode/
