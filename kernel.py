@@ -5,45 +5,31 @@ import warp as wp
 
 @wp.func
 def reflect(v: wp.vec3, n: wp.vec3) -> wp.vec3:
-    return v - 2.0 * wp.dot(v, n) * n
+    dot_vn = wp.dot(v, n)
+    if dot_vn < 0:
+        return v - 2.0 * dot_vn * n
+    else:
+        return v
 
-# @wp.func
-# def amp_bounce_loss(angle_between: wp.float32) -> wp.float32:
-#     # return wp.abs((wp.sin(angle_between + 1.57) + 1.0) / 2.0)
-#     return 0.9
 
-# @wp.func
-# def delay(distance: wp.float32, light_speed_mps) -> wp.float32:
-#     return (distance / LIGHT_SPEED_MPS) * SAMPLE_RATE_HZ
+@wp.func
+def ray_hit_rx(pos: wp.vec3, dir: wp.vec3, rx_pos: wp.vec3, rx_radius: wp.float32, t_rx: wp.float32) -> bool:
+    # Find the closest point on the ray to the receiver
+    t_rx = wp.dot(rx_pos - pos, dir)
+    closest_point = pos + dir * t_rx
 
-# @wp.func
-# def set_impulse_response(path: wp.array(dtype=wp.vec3), impulse_response: wp.array(dtype=wp.float32), ray_power: wp.float32):
-#     amplitude = ray_power
-#     delay = wp.float32(0.0)
+    # Check if the closest point is within the receiver radius
+    return wp.length(closest_point - rx_pos) <= rx_radius
 
-#     for i in range(2, path.shape[0]):
-#         seg1 = path[i - 1] - path[i - 2]
-#         seg2 = path[i] - path[i - 1]
-#         seg1_len = wp.length(seg1)
-#         angle_between = wp.acos(wp.dot(seg1, seg2) / (seg1_len * wp.length(seg2)))
-#         amplitude *= amp_bounce_loss(angle_between)
-#         delay += delay(seg1_len)
-#         print(seg1_len)
-#     print(delay)
-#     print("")
-#     delay_samples = wp.int32(delay)
-#     if delay_samples < impulse_response.shape[0]:
-#         impulse_response[delay_samples] = impulse_response[delay_samples] + amplitude
 
 @wp.kernel
 def trace_paths_kernel(
     env_mesh: wp.uint64,
     tx_pos: wp.vec3,
-    rx_mesh: wp.uint64,
+    rx_pos: wp.vec3,
     max_bounces: wp.int32,
     traced_paths: wp.array2d(dtype=wp.vec3),
-    received_paths: wp.array2d(dtype=wp.vec3),
-    row_mask: wp.array(dtype=wp.uint32),
+    row_mask: wp.array(dtype=wp.uint8),
 ):
     tid = wp.tid()
 
@@ -60,16 +46,9 @@ def trace_paths_kernel(
             maybe_hit_rx = False
             maybe_hit_env = False
 
-            t_rx = float(0.0)
-            u_rx = float(0.0)
-            v_rx = float(0.0)
-            sign_rx = float(0.0)
-            n_rx = wp.vec3()
-            f_rx = int(0)
-
-            # Check if the ray hit the reciever
-            if wp.mesh_query_ray(rx_mesh, pos, dir, 1.0e6, t_rx, u_rx, v_rx, sign_rx, n_rx, f_rx):
-                maybe_hit_rx = True
+            t_rx = wp.dot(rx_pos - pos, dir)
+            closest_point = pos + dir * t_rx
+            maybe_hit_rx = wp.length(closest_point - rx_pos) <= 0.1
 
             t_env = float(0.0)
             u_env = float(0.0)
@@ -84,15 +63,17 @@ def trace_paths_kernel(
 
             hit_recv = maybe_hit_rx and (not maybe_hit_env or (maybe_hit_env and t_env > t_rx))
             if hit_recv:
+                # The ray hit the receiver
                 pos = pos + dir * t_rx
                 traced_paths[tid, bounce + 1] = pos
-                for i in range(wp.int32(bounce) + 2):
-                    received_paths[tid, i] = traced_paths[tid, i]
-                row_mask[tid] = wp.uint32(1)
+                row_mask[tid] = wp.uint8(1)
                 ray_finished = True
             elif maybe_hit_env:
+                # The ray hit the environment
                 pos = pos + dir * t_env
                 traced_paths[tid, bounce + 1] = pos
                 dir = reflect(dir, n_env)
+                # print(wp.length(dir))
             else:
+                # The ray did not hit anything
                 ray_finished = True

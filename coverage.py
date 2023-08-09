@@ -4,7 +4,7 @@ import trimesh as tm
 import matplotlib.pyplot as plt
 
 from tracer import Tracer
-from viz.visualization import visualize
+from visualization import visualize
 
 def to_dbm(power):
     return 10 * np.log10(power / 1e-3)
