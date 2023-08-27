@@ -1,110 +1,83 @@
-import time
-import math
-
 import warp as wp
-import numpy as np
-import trimesh as tm
-from trimesh import viewer
 
-# import kernel_new as kernel
-import kernel
+@wp.func
+def reflect(v: wp.vec3, n: wp.vec3) -> wp.vec3:
+    dot_vn = wp.dot(v, n)
+    return v - 2.0 * dot_vn * n
 
-# class Tracer:
-#     def __init__(self, environment_trimesh, light_speed_mps, sample_rate_hz, sample_window_s, max_bounces, tx_num_rays):
-#         wp.init()
-#         wp.build.clear_kernel_cache()
+@wp.kernel
+def trace_paths_kernel(
+    env_mesh: wp.uint64,
+    tx_pos: wp.vec3,
+    rx_pos: wp.vec3,
+    rx_radius: wp.float32,
+    max_bounces: wp.int32,
+    traced_paths: wp.array2d(dtype=wp.vec3),
+    row_mask: wp.array1d(dtype=wp.uint8),
+    # points: wp.array2d(dtype=wp.vec3),
+):
+    tid = wp.tid()
 
-#         # self.light_speed_mps = light_speed_mps
-#         # self.sample_rate_hz = sample_rate_hz
-#         # self.sample_window_s = sample_window_s
-#         self.max_bounces = max_bounces
-#         self.tx_num_rays = tx_num_rays
-#         env_vertices = wp.array(environment_trimesh.vertices, dtype=wp.vec3)
-#         env_faces = wp.array(environment_trimesh.faces.flatten(), dtype=wp.int32)
-#         self.wp_env = wp.Mesh(points=env_vertices, velocities=None, indices=env_faces)
+    # Choose a random direction for the ray
+    state = wp.rand_init(tid)
+    dir = wp.sample_unit_sphere_surface(state)
+    pos = tx_pos
 
-#     # Adapted from here:
-#     # https://en.wikipedia.org/wiki/Fresnel_equations#Power_(intensity)_reflection_and_transmission_coefficients
-#     def _bounce_amplitude(self, angle_between):
-#         if math.isnan(angle_between):
-#             print("Encountered NaN in _bounce_amplitude")
-#             return 0
+    traced_paths[tid, 0] = pos
+    ray_finished = wp.uint8(0)
 
-#         theta = (math.pi / 2) - (angle_between / 2)
+    for bounce in range(max_bounces):
+        if ray_finished == 0:
+            maybe_hit_rx = False
+            maybe_hit_env = False
 
-#         print(theta)
+            t_rx = wp.dot(rx_pos - pos, dir)
+            if t_rx > 0:
+                closest_point = pos + dir * t_rx
+                maybe_hit_rx = wp.length(closest_point - rx_pos) <= rx_radius
 
-#         n_1 = 5.0
-#         n_2 = 1.0
-#         theta_i = math.asin((n_2 * math.sin(theta)) / n_1)
-#         print(theta_i)
+            t_env = float(0.0)
+            u_env = float(0.0)
+            v_env = float(0.0)
+            sign_env = float(0.0)
+            n_env = wp.vec3()
+            f_env = int(0)
 
-#         num = n_2 * math.cos(theta_i) - n_1 * math.cos(theta)
-#         denom = n_2 * math.cos(theta_i) + n_1 * math.cos(theta)
+            # Check if the ray hit the environment
+            if wp.mesh_query_ray(env_mesh, pos, dir, 1.0e6, t_env, u_env, v_env, sign_env, n_env, f_env):
+                maybe_hit_env = True
 
-#         amp = -(num / denom)**2
-#         if amp < -1:
-#             amp = -1
+            hit_recv = maybe_hit_rx and ((not maybe_hit_env) or (maybe_hit_env and t_env > t_rx))
+            if hit_recv:
+                # The ray hit the receiver
+                traced_paths[tid, bounce + 1] = closest_point
+                row_mask[tid] = wp.uint8(1)
+                ray_finished = wp.uint8(1)
+            elif maybe_hit_env:
+                # The ray hit the environment
+                pos = pos + dir * t_env
+                traced_paths[tid, bounce + 1] = pos
+                dir = reflect(dir, n_env)
+                dir = wp.normalize(dir)
 
-#         if math.isnan(amp):
-#             print("Encountered NaN in _bounce_amplitude")
-#             return 0
-
-#         return -amp
-    
-#     def trace_paths(self, tx_pos, tx_power, rx_pos, rx_radius):
-#         tx_pos = wp.vec3(tx_pos)
-#         rx_pos = wp.vec3(rx_pos)
-
-#         paths = wp.zeros(shape=(self.tx_num_rays, self.max_bounces + 1), dtype=kernel.PathPoint)
-#         bounce_num = 0
-
-#         wp.launch(
-#             kernel.do_bounce,
-#             dim=self.tx_num_rays,
-#             inputs=[
-#                 self.wp_env.id,
-#                 tx_pos,
-#                 rx_pos,
-#                 bounce_num,
-#                 paths,
-#             ],
-#         )
-#         wp.synchronize_device()
-
-#         paths = paths.numpy()
-
-#         print(paths)
-        
-#         # Mask out rows that didn't hit the receiver
-#         # cleaned_paths = []
-#         # for path in paths:
-#         #     cleaned_path = []
-#         #     for point in path:
-#         #         if not point[0] == 0:
-#         #             cleaned_path.append(point)
-#         #     if len(cleaned_path) > 2:
-#         #         cleaned_paths.append(cleaned_path)
-
-#         # return cleaned_paths
-
+            else:
+                # The ray did not hit anything
+                ray_finished = wp.uint8(1)
 
 
 class Tracer:
-    def __init__(self, environment_trimesh, light_speed_mps, sample_rate_hz, sample_window_s, max_bounces, tx_num_rays):
+    def __init__(self, environment_trimesh, max_bounces, tx_num_rays, rx_radius):
         wp.init()
         wp.build.clear_kernel_cache()
 
-        # self.light_speed_mps = light_speed_mps
-        # self.sample_rate_hz = sample_rate_hz
-        # self.sample_window_s = sample_window_s
         self.max_bounces = max_bounces
         self.tx_num_rays = tx_num_rays
+        self.rx_radius = rx_radius
         env_vertices = wp.array(environment_trimesh.vertices, dtype=wp.vec3)
         env_faces = wp.array(environment_trimesh.faces.flatten(), dtype=wp.int32)
         self.wp_env = wp.Mesh(points=env_vertices, velocities=None, indices=env_faces)
     
-    def trace_paths(self, tx_pos, tx_power, rx_pos, rx_radius):
+    def trace_paths(self, tx_pos, rx_pos):
         tx_pos = wp.vec3(tx_pos)
         rx_pos = wp.vec3(rx_pos)
 
@@ -112,12 +85,13 @@ class Tracer:
         row_mask = wp.zeros(shape=self.tx_num_rays, dtype=wp.uint8)
 
         wp.launch(
-            kernel.trace_paths_kernel,
+            trace_paths_kernel,
             dim=self.tx_num_rays,
             inputs=[
                 self.wp_env.id,
                 tx_pos,
                 rx_pos,
+                self.rx_radius,
                 self.max_bounces,
                 paths,
                 row_mask,
@@ -127,11 +101,8 @@ class Tracer:
 
         paths = paths.numpy()
         row_mask = row_mask.numpy()
-
         paths = paths[row_mask == 1]
-
-        print(paths.shape)
-        
+          
         # Mask out rows that didn't hit the receiver
         cleaned_paths = []
         for path in paths:
@@ -139,7 +110,7 @@ class Tracer:
             for point in path:
                 if not point[0] == 0:
                     cleaned_path.append(point)
-            if len(cleaned_path) > 2:
+            if len(cleaned_path) > 0:
                 cleaned_paths.append(cleaned_path)
 
         return cleaned_paths

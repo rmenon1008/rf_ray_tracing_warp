@@ -3,7 +3,7 @@ import trimesh as tm
 from trimesh import viewer
 import numpy as np
 
-def visualize(mesh=None, tx_pos=None, rx_pos=None, paths=None, points=None, point_color_pairs=None):
+def viz_scene(mesh=None, tx_pos=None, rx_pos=None, paths=None, points=None, point_color_pairs=None, radius=0.25):
     # Visualize the result
     scene = tm.Scene()
 
@@ -17,17 +17,17 @@ def visualize(mesh=None, tx_pos=None, rx_pos=None, paths=None, points=None, poin
         scene.add_geometry(mesh)
 
     if tx_pos is not None:
-        tx_vis = tm.primitives.Sphere(radius=1, center=tx_pos)
+        tx_vis = tm.primitives.Sphere(radius=radius, center=tx_pos)
         tx_vis.visual.face_colors = [255, 0, 0, 255]
         scene.add_geometry(tx_vis)
 
     if rx_pos is not None:
-        rx_vis = tm.primitives.Sphere(radius=1, center=rx_pos)
+        rx_vis = tm.primitives.Sphere(radius=radius, center=rx_pos)
         rx_vis.visual.face_colors = [0, 255, 0, 255]
         scene.add_geometry(rx_vis)
 
     if points is not None:
-        scene.add_geometry(tm.points.PointCloud(points, colors=np.tile([255, 255, 255], (points.shape[0], 1))))
+        scene.add_geometry(tm.points.PointCloud(points, colors=np.tile([0, 255, 0], (points.shape[0], 1))))
 
     if paths is not None:
         print(f"Adding {len(paths)} paths to the scene...")
@@ -38,7 +38,7 @@ def visualize(mesh=None, tx_pos=None, rx_pos=None, paths=None, points=None, poin
 
     if point_color_pairs is not None:
         for point_color in point_color_pairs:
-            point = tm.primitives.Sphere(radius=0.1, center=point_color[0])
+            point = tm.primitives.Sphere(radius=radius/8, center=point_color[0])
             point.visual.face_colors = point_color[1]
             scene.add_geometry(point)
 
@@ -53,3 +53,6 @@ def visualize(mesh=None, tx_pos=None, rx_pos=None, paths=None, points=None, poin
     httpd = http.server.HTTPServer(('', 8000), Handler)
     print("Serving visualization at localhost:8000")
     httpd.serve_forever()
+
+def viz_impulse_response():
+    pass
