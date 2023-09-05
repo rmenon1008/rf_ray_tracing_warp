@@ -2,24 +2,26 @@ import numpy as np
 import trimesh as tm
 from matplotlib import pyplot as plt
 
-from tracer import *
-from visualization import *
-from mesh_operations import *
-from signal_processing import *
+from tracing.tracer import *
+from tracing.visualization import *
+from tracing.mesh_operations import *
+from tracing.signal_processing import *
 
 MAX_BOUNCES = 4
-TX_NUM_RAYS = 50_000_000
-RX_RADIUS_M = 0.0198832  # From wavelength**2 / (4*pi)
+TX_NUM_RAYS = 20_000_000
+# RX_RADIUS_M = 0.001224  # From wavelength**2 / (4*pi)
+RX_RADIUS_M = 0.05
 
-mesh = load_mesh("models/quarry_9.stl", scale=0.25)
-tx_pos = place_on_ground(mesh, [20, 25], offset=.5)
-rx_pos = place_on_ground(mesh, [37.5, 30], offset=.5)
+# mesh = load_mesh("meshes/quarry_9.stl", scale=0.25)
+# tx_pos = place_on_ground(mesh, [20, 25], offset=.5)
+# rx_pos = place_on_ground(mesh, [37.5, 30], offset=.5)
+
 # tx_pos = place_on_ground(mesh, [20, 32.5], offset=.5)
 # rx_pos = place_on_ground(mesh, [20, 45], offset=.5)
 
-# mesh = tm.load_mesh("models/almost_empty.stl") 
-# tx_pos = [2, 5, 0]
-# rx_pos = [3, 5, 0]
+mesh = tm.load_mesh("meshes/room.stl")
+tx_pos = [-10, 0, 6]
+rx_pos = [10, 0.5, 6]
 
 print(f"Mesh: {mesh.bounding_box.bounds}")
 print(f"TX: {tx_pos}")
@@ -32,11 +34,11 @@ paths = tracer.trace_paths(tx_pos, rx_pos)
 # print(f"Amplitude: {watts_to_dbm(amp)} dBm")
 # print(f"Phase: {phase} rad")
 
-csi_amp, csi_phase = paths_to_csi(paths, TX_NUM_RAYS, tx_power_watts=1, noise_dbm=-80)
+csi_amp, csi_phase = paths_to_csi(paths, TX_NUM_RAYS, tx_power_watts=1, noise_dbm=-60)
 csi_amp_dbm = watts_to_dbm(csi_amp)
 csi_phase_deg = np.rad2deg(csi_phase)
 
-print(f"Center amplitude: {watts_to_dbm(csi_amp[32])} dBm")
+print(f"Center amplitude: {watts_to_dbm(csi_amp[64])} dBm")
 
 plt.figure()
 plt.plot(csi_amp_dbm)

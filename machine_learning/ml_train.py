@@ -23,6 +23,15 @@ for file in os.listdir(DATASET_PATH):
     # inputs.append((data["csi_amp"]))
     outputs.append((data["local_map"]).flatten())
 
+# Graph a sample of the dataset
+plt.figure(figsize=(10, 10))
+for i in range(9):
+    plt.subplot(3, 3, i + 1)
+    plt.imshow(inputs[i])
+    plt.title(outputs[i])
+    plt.
+plt.savefig("sample.png")
+
 # Convert the dataset to tensors
 inputs = torch.tensor(inputs, dtype=torch.float32)
 outputs = torch.tensor(outputs, dtype=torch.float32)
@@ -40,7 +49,7 @@ train_outputs = outputs[:int(len(outputs) * 0.8)]
 test_inputs = inputs[int(len(inputs) * 0.8):]
 test_outputs = outputs[int(len(outputs) * 0.8):]
 
-# Create the model
+## Create the model
 # model = nn.Sequential(
 #     nn.Linear(128, 256),
 #     nn.LeakyReLU(),
@@ -77,11 +86,25 @@ model = nn.Sequential(
     nn.Linear(9, 9),
 )
 
+# model = nn.Sequential(
+#     nn.Conv1d(1, 16, 4, stride=2),
+#     nn.LeakyReLU(),
+#     nn.Conv1d(16, 32, 4, stride=2),
+#     nn.LeakyReLU(),
+#     nn.Conv1d(32, 64, 4, stride=2),
+#     nn.LeakyReLU(),
+#     nn.Conv1d(64, 32, 4, stride=2),
+#     nn.LeakyReLU(),
+#     nn.Conv1d(32, 16, 4, stride=2),
+#     nn.Flatten(),
+#     nn.Linear(32, 9)
+# )
+
 # Create the loss function
 loss_fn = nn.MSELoss()
 
 # Create the optimizer
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
 # Load the model
 try:
@@ -100,14 +123,13 @@ test_outputs = test_outputs.to(device)
 # Train the model and plot the loss and accuracy
 train_losses = []
 test_losses = []
-for epoch in range(1):
+for epoch in range(1000):
     # Permuate the training data
     permutation = torch.randperm(train_inputs.size()[0])
     train_inputs = train_inputs[permutation]
     train_outputs = train_outputs[permutation]
 
     # Forward pass
-    print(train_inputs.shape)
     y_pred = model(train_inputs)
 
     # Compute loss

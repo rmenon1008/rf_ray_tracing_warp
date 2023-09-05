@@ -23,7 +23,7 @@ def place_on_ground(mesh, pos, offset=0):
         pos = intersections[0][intersections[0][:, 2].argmax()]
         pos[2] += offset
     except:
-        pos.append(0)
+        pos = np.array([pos[0], pos[1], 0])
 
     return pos
 

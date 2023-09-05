@@ -21,11 +21,13 @@ def bounce_amplitude(angle_between):
 
     return amp
 
-def paths_to_phase_amp(paths, tx_num_rays, tx_power_watts, freq_hz, noise_dbm=-45):
+def paths_to_phase_amp(paths, tx_num_rays, tx_power_watts, freq_hz, noise_dbm=-90):
     combined_signal = 0
-    for path in paths:
+    for i in range(len(paths)):
+        path = paths[i]
+        
         path_len = 0
-        amplitude = tx_power_watts / tx_num_rays
+        amplitude = (tx_power_watts / tx_num_rays)
         for p in range(len(path) - 2):
             seg1 = path[p + 1] - path[p]
             seg2 = path[p + 2] - path[p + 1]
@@ -39,14 +41,15 @@ def paths_to_phase_amp(paths, tx_num_rays, tx_power_watts, freq_hz, noise_dbm=-4
             combined_signal += new_signal
 
     # Add AWGN
-    noise = np.random.normal(0, dbm_to_watts(noise_dbm))
-    combined_signal += noise
+    # noise = np.random.normal(0, dbm_to_watts(noise_dbm))
+    # combined_signal += noise
+    combined_signal += dbm_to_watts(noise_dbm)
     
     # Return the amplitude and phase of the combined signal
     return np.abs(combined_signal), np.angle(combined_signal)
 
-def paths_to_csi(paths, tx_num_rays, tx_power_watts, channel_center_freq=2.401e9, noise_dbm=-45):
-    subcarriers = np.linspace(channel_center_freq - 20e6, channel_center_freq + 20e6, 64)
+def paths_to_csi(paths, tx_num_rays, tx_power_watts, channel_center_freq=2.401e9, noise_dbm=-90):
+    subcarriers = np.linspace(channel_center_freq - 20e6, channel_center_freq + 20e6, 128)
     csi_mag = np.zeros_like(subcarriers)
     csi_phase = np.zeros_like(subcarriers)
 

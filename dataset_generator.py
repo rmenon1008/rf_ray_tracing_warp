@@ -5,17 +5,17 @@ import numpy as np
 import trimesh as tm
 import PIL
 
-from tracer import *
-from visualization import *
-from mesh_operations import *
-from signal_processing import *
+from tracing.tracer import *
+from tracing.visualization import *
+from tracing.mesh_operations import *
+from tracing.signal_processing import *
 
 MAX_BOUNCES = 4
 TX_NUM_RAYS = 10_000_000
 TX_POWER_WATTS = 1
 RX_RADIUS_M = 0.0198832  # From wavelength**2 / (4*pi)
 
-mesh = load_mesh("models/quarry_9.stl", scale=0.25)
+mesh = load_mesh("meshes/quarry_9.stl", scale=0.25)
 print(f"Mesh: {mesh.bounding_box.bounds}")
 
 tracer = Tracer(mesh, MAX_BOUNCES, TX_NUM_RAYS, RX_RADIUS_M)
