@@ -72,6 +72,7 @@ test_losses = []
 for epoch in range(100):
     # Forward pass
     outputs = model(train_inputs)
+    print(outputs.shape)
     loss = loss_fn(outputs, train_outputs)
     training_losses.append(loss.item())
 
