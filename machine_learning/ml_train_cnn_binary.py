@@ -41,25 +41,26 @@ def parse_args():
 class Net(nn.Module):
     def __init__(self):
         super().__init__()
-        # self.conv1 = nn.Conv2d(2, 6, 5)
-        # self.pool = nn.MaxPool2d(2, 2)
-        # self.conv2 = nn.Conv2d(6, 16, 5)
-        # self.fc1 = nn.Linear(16 * 5 * 5, 120)
-        # self.fc2 = nn.Linear(120, 84)
-        # self.fc3 = nn.Linear(84, 10)
+        self.apply(self._init_weights)
+        # 1 Channel
+        # self.conv1 = nn.Conv2d(2, 6, kernel_size=(2, 3))
+        # self.pool = nn.MaxPool2d(2, (1, 2))
+        # self.conv2 = nn.Conv2d(6, 16, kernel_size=(2, 3))
+        # self.conv3 = nn.Conv2d(16, 32, kernel_size=(1, 2))
+        # self.fc1 = nn.Linear(1344, 64)
+        # # self.fc2 = nn.Linear(512, 64)
+        # self.fc3 = nn.Linear(64, 1)
+        # self.sig = nn.Sigmoid()
 
-        # self.conv1 = nn.Conv2d(2, 6, 3)
-        # self.pool = nn.MaxPool2d(2, 2)
-        # self.fc1 = nn.Linear(1134, 512)
+        # 2 Channels
+        self.conv1 = nn.Conv2d(1, 6, kernel_size=(2, 3))
+        self.pool = nn.MaxPool2d(2, (1, 2))
+        self.conv2 = nn.Conv2d(6, 16, kernel_size=(2, 3))
+        self.conv3 = nn.Conv2d(16, 32, kernel_size=(1, 2))
+        self.fc1 = nn.Linear(1344, 64)
         # self.fc2 = nn.Linear(512, 64)
-        # self.fc3 = nn.Linear(64, 2)
-
-        self.conv1 = nn.Conv2d(2, 6, 3)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(6, 16, 2)
-        self.fc1 = nn.Linear(496, 512)
-        self.fc2 = nn.Linear(512, 64)
-        self.fc3 = nn.Linear(64, 2)
+        self.fc3 = nn.Linear(64, 1)
+        self.sig = nn.Sigmoid()
 
     def forward(self, x):
         x = self.conv1(x)
@@ -74,12 +75,19 @@ class Net(nn.Module):
         x = self.pool(x)
         # cprint.info('Second pool')
         # cprint.warn(x.shape)
+        x = self.conv3(x)
+        # cprint.info('Second conv')
+        # cprint.warn(x.shape)
+        x = F.relu(x)
+        # cprint.info('Third Relu')
+        # cprint.warn(x.shape)
+        x = self.pool(x)
         x = torch.flatten(x, 1) # flatten all dimensions except batch
         # cprint.info('flatten')
         # cprint.warn(x.shape)
         x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
+        # x = F.relu(self.fc2(x))
+        x = self.sig(self.fc3(x))
         # cprint.info('second linear')
         # cprint.warn(x.shape)
         # x = F.relu(self.fc1(x))
@@ -91,8 +99,26 @@ class Net(nn.Module):
         # x = self.fc3(x)
         return x
 
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=1.0)
+            if module.bias is not None:
+                module.bias.data.zero_()
 
-
+class MyNeuralNetwork(nn.Module):
+    def __init__(self, input_size = 1024):
+        super(MyNeuralNetwork, self).__init__()
+        self.fc1 = nn.Linear(input_size, 84)
+        self.fc2 = nn.Linear(84, 50)
+        self.fc3 = nn.Linear(50,2)
+    
+    def forward(self, x):
+        x = x.view(-1, 1024)
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)
+        return x
+    
 if __name__ == "__main__":
     args = parse_args()
     run_name = f"{args.exp_name}__{int(time.time())}"
@@ -117,14 +143,16 @@ if __name__ == "__main__":
     # define a transform to convert a tensor to PIL image
     transform = T.ToPILImage()
 
-    net = Net()
+    # net = Net()
+    net = MyNeuralNetwork()
 
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     net.to(device)
 
-    criterion = nn.CrossEntropyLoss()
     # criterion = nn.BCELoss()
-    optimizer = optim.SGD(net.parameters(), lr=0.00001, momentum=0.9)
+    criterion = nn.CrossEntropyLoss()
+    # optimizer = optim.SGD(net.parameters(), lr=0.00001, momentum=0.9)
+    optimizer = optim.Adam(net.parameters(), lr=0.001)
 
     # Define the input tensor shape
     batch_size = 1
@@ -143,28 +171,28 @@ if __name__ == "__main__":
     inputs = []
     outputs = []
 
+    i = 0
     # Iterate through each training file
     for folder in os.listdir(DATASET_FOLDER):
         for file in os.listdir(DATASET_FOLDER + folder):
             # Load the data
             data = np.load(DATASET_FOLDER + folder + "/" + file)
-            # print(data["csi_amp_datapoints"][:8].shape)
-            # print(data["csi_amp_datapoints"][-1][64])
+            # print(data["csi_amp_datapoints"].shape)
+            # print(data["csi_amp_datapoints"])
             # Add the data to the dataset
-            inputs.append(np.stack((data["csi_amp_datapoints"][:], data["csi_phase_datapoints"][:]), axis=0))
-
+            inputs.append(np.stack((data["csi_amp_datapoints"][:] + 85, data["csi_phase_datapoints"][:]), axis=0))
             # Get output
-            # print(data["csi_amp_datapoints"][:8])
-            # print(data["csi_amp_datapoints"][7])
-            # print(data["csi_amp_datapoints"][8])
             balance = np.mean(data["csi_amp_datapoints"][8]) - np.mean(data["csi_amp_datapoints"][7])
-            
+            if i < 10:
+                # cprint.warn(f'index 8: {np.mean(data["csi_amp_datapoints"][8])}  index 7: {np.mean(data["csi_amp_datapoints"][7])}')
+                i += 1
             if balance > 0:
-                label = np.array([[1., -1.]]) # "forward"
+                label = np.array([1]) # "forward"
             else:
-                label = np.array([[-1., 1.]]) # "backward"
+                label = np.array([0]) # "backward"
             
             outputs.append(label)
+
 
     # Convert the dataset to tensors
     inputs = torch.tensor(inputs, dtype=torch.float32)
@@ -189,31 +217,34 @@ if __name__ == "__main__":
         for i, data in enumerate(train_inputs, 0):
             # if torch.randint(0,10,(1,)) == 1:
             # print(data[0][:9])
-            test = torch.mean(data[0], axis = 1)
+            # test = torch.mean(data[0], axis = 1)
             # cprint.info(test.shape)
             # cprint.info(test)
-            # plt.plot(torch.arange(test.shape[0]), test)
-            # plt.show()
+
             # writer.add_figure('input', img)
 
             data = data[np.newaxis, ...]
             
             # get the inputs; data is a list of [inputs, labels]
             # inputs, labels = data[:,:9,:].to(device), data[1].to(device) 
-            input = data[:,:,:8,:].to(device)
-            label = train_outputs[i].to(device)
+            input = data[:,:1,:8,:].to(device)
+            label = train_outputs[i].type(torch.LongTensor).to(device)
+
+            # plt.plot(torch.arange(test.shape[0]), test)
+            # cprint.info(f'label: {label}')
+            # cprint.ok(f'mean: {test}')
+            # plt.show()
 
             # zero the parameter gradients
             optimizer.zero_grad()
 
             # forward + backward + optimize
             output = net(input)
-            # cprint.info(output)
-            # cprint.warn(label)
+            # cprint.info(f'output {output}')
+            # cprint.warn(f'label {label}')
             loss = criterion(output, label)
             loss.backward()
             optimizer.step()
-            # print(loss.item())
 
             # print statistics
             running_loss += loss.item()
@@ -233,18 +264,36 @@ if __name__ == "__main__":
     torch.save(net.state_dict(), PATH)
 
     # Test model
-    net = Net()
+    # net = Net()
+    net = MyNeuralNetwork()
     net.load_state_dict(torch.load(PATH))
     net.to(device)
 
-    for i in range(20):
+    acc = 0
+    for i in range(100):
         rand = torch.randint(0, 1267, (1,))
         # data = test_inputs[np.newaxis, ...]
-        test_input = test_inputs[rand,:,:8,:]
+        test_input = test_inputs[rand,:1,:8,:]
         input = test_input.to(device)
         outputs = net(input)
-        print(outputs)
-        print(test_outputs[rand])
+        prediction = F.softmax(outputs, dim = 1).argmax()
+        cprint.warn(f'outputs {outputs}')
+        cprint.info(f'prediction {prediction} label {test_outputs[rand]}')
+        if test_outputs[[rand]] == prediction.cpu():
+            acc += 1
+    acc = (acc / 20) * 100
+    print('accuracy %', acc)
+    # Test accuracy
+    acc = 0
+    for i in range(test_inputs.shape[0]):
+        test_input = test_inputs[torch.tensor([i]),:1,:8,:]
+        input = test_input.to(device)
+        outputs = net(input)
+        prediction = F.softmax(outputs, dim = 1).argmax()
+        if test_outputs[[i]] == prediction.cpu():
+            acc += 1
+    acc = (acc / test_inputs.shape[0]) * 100
+    print('accuracy %', acc)
         
     writer.close()
 
